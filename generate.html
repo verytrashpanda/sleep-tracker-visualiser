@@ -26,33 +26,19 @@
     header p { font-size: 13px; color: var(--muted); }
     header a { color: var(--faint); font-size: 12px; font-family: var(--font-mono); text-decoration: none; }
     header a:hover { color: var(--accent); }
-
     .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1.5rem; margin-bottom: 1.5rem; }
     .card h2 { font-family: var(--font-mono); font-size: 13px; font-weight: 500; color: var(--muted); margin-bottom: 1.25rem; letter-spacing: 0.04em; }
-
     .field-row { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
-    .field-row label { font-family: var(--font-mono); font-size: 12px; color: var(--muted); width: 140px; flex-shrink: 0; }
+    .field-row label { font-family: var(--font-mono); font-size: 12px; color: var(--muted); width: 160px; flex-shrink: 0; }
     input[type=range] { flex: 1; min-width: 120px; max-width: 200px; accent-color: var(--accent); }
-    .val { font-family: var(--font-mono); font-size: 12px; color: var(--text); min-width: 40px; }
+    .val { font-family: var(--font-mono); font-size: 12px; color: var(--text); min-width: 50px; }
     input[type=number] { font-family: var(--font-mono); font-size: 12px; padding: 4px 8px; border-radius: 4px; border: 1px solid var(--border2); background: var(--bg); color: var(--text); width: 70px; }
     input[type=number]:focus { outline: none; border-color: var(--accent); }
-
-    .btn {
-      font-family: var(--font-mono);
-      font-size: 13px;
-      padding: 9px 20px;
-      border-radius: 5px;
-      border: 1px solid var(--border2);
-      background: transparent;
-      color: var(--text);
-      cursor: pointer;
-      transition: background 0.12s, border-color 0.12s;
-    }
+    .field-note { font-size: 11px; color: var(--faint); margin-bottom: 16px; margin-top: -6px; font-family: var(--font-mono); }
+    .btn { font-family: var(--font-mono); font-size: 13px; padding: 9px 20px; border-radius: 5px; border: 1px solid var(--border2); background: transparent; color: var(--text); cursor: pointer; transition: background 0.12s, border-color 0.12s; }
     .btn:hover { background: var(--surface); border-color: var(--accent); }
-
     #msg { font-family: var(--font-mono); font-size: 12px; color: var(--muted); margin-top: 12px; }
     #msg.ok { color: #5dbd7e; }
-
     .desc { font-size: 12px; color: var(--faint); margin-bottom: 1.25rem; line-height: 1.7; }
   </style>
 </head>
@@ -64,28 +50,64 @@
 </header>
 
 <div class="card">
-  <h2>parameters</h2>
-  <p class="desc">Generates realistic Huawei Health-format JSON with daytime wear, sleep sessions, random off-wrist gaps, and occasional naps. Drop the output file into the visualiser.</p>
+  <h2>wear pattern</h2>
+  <p class="desc">Models continuous wear with realistic off-wrist gaps: evening shower, occasional charging, and rare full days off.</p>
 
   <div class="field-row">
-    <label>days</label>
-    <input type="range" min="7" max="365" value="30" id="days" oninput="document.getElementById('days-val').textContent=this.value">
-    <span class="val" id="days-val">30</span>
+    <label>days to generate</label>
+    <input type="range" min="7" max="365" value="60" id="days" oninput="document.getElementById('days-val').textContent=this.value">
+    <span class="val" id="days-val">60</span>
   </div>
+
   <div class="field-row">
-    <label>nights skipped (%)</label>
-    <input type="range" min="0" max="50" value="12" id="skip" oninput="document.getElementById('skip-val').textContent=this.value+'%'">
-    <span class="val" id="skip-val">12%</span>
+    <label>charge every (days)</label>
+    <input type="range" min="5" max="20" value="13" id="charge-interval" oninput="document.getElementById('charge-val').textContent=this.value">
+    <span class="val" id="charge-val">13</span>
   </div>
+  <p class="field-note">generates a ~1.5hr charging gap on that cycle</p>
+
   <div class="field-row">
-    <label>nap chance (%)</label>
-    <input type="range" min="0" max="60" value="20" id="nap" oninput="document.getElementById('nap-val').textContent=this.value+'%'">
-    <span class="val" id="nap-val">20%</span>
+    <label>shower gap (mins)</label>
+    <input type="range" min="10" max="60" value="25" id="shower-dur" oninput="document.getElementById('shower-val').textContent=this.value+'m'">
+    <span class="val" id="shower-val">25m</span>
   </div>
+  <p class="field-note">evening shower, 18:00–21:00 window</p>
+
+  <div class="field-row">
+    <label>days fully off (%)</label>
+    <input type="range" min="0" max="20" value="3" id="off-days" oninput="document.getElementById('off-val').textContent=this.value+'%'">
+    <span class="val" id="off-val">3%</span>
+  </div>
+</div>
+
+<div class="card">
+  <h2>sleep pattern</h2>
+  <p class="desc">Variable bedtime and duration. Wake time derived from sleep end.</p>
+
+  <div class="field-row">
+    <label>bedtime window</label>
+    <input type="number" min="18" max="28" value="21" id="bed-early" title="earliest (24h, e.g. 21 = 9pm)"> –
+    <input type="number" min="18" max="30" value="28" id="bed-late" title="latest (e.g. 28 = 4am next day)">
+    <span style="font-size:11px;color:var(--faint);font-family:var(--font-mono)">24h (28 = 4am)</span>
+  </div>
+
   <div class="field-row">
     <label>sleep duration (hrs)</label>
-    <input type="number" min="3" max="12" value="5" id="sleep-min" title="minimum"> –
-    <input type="number" min="3" max="12" value="8" id="sleep-max" title="maximum">
+    <input type="number" min="2" max="12" value="4" id="sleep-min" title="minimum"> –
+    <input type="number" min="2" max="14" value="11" id="sleep-max" title="maximum">
+  </div>
+
+  <div class="field-row">
+    <label>nights no sleep (%)</label>
+    <input type="range" min="0" max="30" value="5" id="skip" oninput="document.getElementById('skip-val').textContent=this.value+'%'">
+    <span class="val" id="skip-val">5%</span>
+  </div>
+  <p class="field-note">watch worn but no sleep recorded (e.g. stayed up all night)</p>
+
+  <div class="field-row">
+    <label>nap chance (%)</label>
+    <input type="range" min="0" max="50" value="10" id="nap" oninput="document.getElementById('nap-val').textContent=this.value+'%'">
+    <span class="val" id="nap-val">10%</span>
   </div>
 </div>
 
@@ -97,63 +119,101 @@
   function rndInt(min, max) { return Math.floor(rnd(min, max)); }
 
   function generate() {
-    const days      = parseInt(document.getElementById('days').value);
-    const skipPct   = parseInt(document.getElementById('skip').value) / 100;
-    const napPct    = parseInt(document.getElementById('nap').value) / 100;
-    const sleepMin  = parseFloat(document.getElementById('sleep-min').value) * 60;
-    const sleepMax  = parseFloat(document.getElementById('sleep-max').value) * 60;
+    const days           = parseInt(document.getElementById('days').value);
+    const chargeInterval = parseInt(document.getElementById('charge-interval').value);
+    const showerDurMins  = parseInt(document.getElementById('shower-dur').value);
+    const offDaysPct     = parseInt(document.getElementById('off-days').value) / 100;
+    const bedEarly       = parseFloat(document.getElementById('bed-early').value);
+    const bedLate        = parseFloat(document.getElementById('bed-late').value);
+    const sleepMinHrs    = parseFloat(document.getElementById('sleep-min').value);
+    const sleepMaxHrs    = parseFloat(document.getElementById('sleep-max').value);
+    const skipPct        = parseInt(document.getElementById('skip').value) / 100;
+    const napPct         = parseInt(document.getElementById('nap').value) / 100;
 
     const records = [];
     const now = new Date();
+
+    // Pre-pick which day in each charge cycle the charging happens
+    const chargeDays = new Set();
+    for (let c = 0; c < days; c += chargeInterval) {
+      chargeDays.add(c + rndInt(0, chargeInterval));
+    }
 
     for (let i = days - 1; i >= 0; i--) {
       const day = new Date(now);
       day.setDate(day.getDate() - i);
       day.setHours(0, 0, 0, 0);
 
-      const wakeHour   = rnd(7, 9);
-      const skipNight  = Math.random() < skipPct;
-      const sleepHour  = rnd(22, 25);
-      const dayEndHour = skipNight ? 24 : sleepHour;
+      const dayIndex = days - 1 - i;
 
-      // Daytime wear with gaps
-      const numGaps = rndInt(1, 4);
+      // Fully off wrist today?
+      if (Math.random() < offDaysPct) continue;
+
+      // --- Build gaps for today ---
       const gaps = [];
-      for (let g = 0; g < numGaps; g++) {
-        const gs = rnd(9, 21), gd = rnd(0.25, 1);
-        gaps.push({ start: gs, end: gs + gd });
+
+      // Evening shower gap (18:00–21:00 window)
+      const showerStart = rnd(18, 21);
+      const showerEnd   = showerStart + showerDurMins / 60;
+      gaps.push({ start: showerStart, end: showerEnd });
+
+      // Charging gap (only on charge days)
+      if (chargeDays.has(dayIndex)) {
+        const chargeStart = rnd(8, 22);
+        const chargeDur   = rnd(1, 2); // 1–2 hours
+        gaps.push({ start: chargeStart, end: chargeStart + chargeDur });
       }
+
       gaps.sort((a, b) => a.start - b.start);
 
+      // --- Bedtime & sleep ---
+      const skipNight  = Math.random() < skipPct;
+      const bedHour    = rnd(bedEarly, bedLate); // may exceed 24 — wraps to next day
+      const sleepMins  = rndInt(sleepMinHrs * 60, sleepMaxHrs * 60);
+
+      // Wear runs from ~7am to bedtime (capped at midnight if no sleep)
+      const wakeHour   = rnd(6, 9);
+      const wearEnd    = skipNight ? 24 : Math.min(bedHour, 24);
+
+      // Emit wear segments around gaps
       let cursor = wakeHour;
       for (const gap of gaps) {
-        if (gap.start > dayEndHour) continue;
-        if (cursor < gap.start) records.push(wearRec(day, cursor, Math.min(gap.start, dayEndHour)));
-        cursor = gap.end;
+        if (gap.start >= wearEnd) continue;
+        if (cursor < gap.start) records.push(wearRec(day, cursor, Math.min(gap.start, wearEnd)));
+        cursor = Math.max(cursor, gap.end);
       }
-      if (cursor < dayEndHour) records.push(wearRec(day, cursor, dayEndHour));
+      if (cursor < wearEnd) records.push(wearRec(day, cursor, wearEnd));
 
-      // Night sleep
+      // --- Sleep session ---
       if (!skipNight) {
-        const sleepStart = new Date(day.getTime() + sleepHour * 3600000);
-        const totalMins  = rndInt(sleepMin, sleepMax);
-        const stages     = buildStages(sleepStart, totalMins);
-        records.push({ startTime: sleepStart.getTime(), endTime: stages[stages.length-1].endTime, stages });
+        // bedHour may be > 24 (e.g. 25.5 = 1:30am next day)
+        const sleepStart = new Date(day.getTime() + bedHour * 3600000);
+        const stages     = buildStages(sleepStart, sleepMins);
+        const sleepEnd   = stages[stages.length - 1].endTime;
+        records.push({ startTime: sleepStart.getTime(), endTime: sleepEnd, stages });
+
+        // Wear resumes after wake (same record wrapping into next day handled by visualiser)
+        const wakeAfterSleepHour = bedHour + sleepMins / 60;
+        // We don't need to emit wear here — the next day's loop handles it
       }
 
-      // Nap
+      // --- Nap ---
       if (Math.random() < napPct) {
-        const napHour = rnd(13, 16), napMins = rndInt(20, 60);
-        const ns = new Date(day.getTime() + napHour * 3600000);
-        const ne = new Date(ns.getTime() + napMins * 60000);
-        records.push({
-          startTime: ns.getTime(), endTime: ne.getTime(),
-          stages: [
-            { startTime: ns.getTime(), endTime: new Date(ns.getTime()+5*60000).getTime(), stage: 1 },
-            { startTime: new Date(ns.getTime()+5*60000).getTime(), endTime: new Date(ne.getTime()-5*60000).getTime(), stage: 2 },
-            { startTime: new Date(ne.getTime()-5*60000).getTime(), endTime: ne.getTime(), stage: 4 },
-          ]
-        });
+        const napHour = rnd(12, 17);
+        // Only add nap if it doesn't overlap bedtime
+        if (napHour + 1.5 < bedHour) {
+          const napMins = rndInt(20, 90);
+          const ns = new Date(day.getTime() + napHour * 3600000);
+          const ne = new Date(ns.getTime() + napMins * 60000);
+          records.push({
+            startTime: ns.getTime(), endTime: ne.getTime(),
+            stages: [
+              { startTime: ns.getTime(), endTime: new Date(ns.getTime() + Math.min(10, napMins*0.2)*60000).getTime(), stage: 1 },
+              { startTime: new Date(ns.getTime() + Math.min(10, napMins*0.2)*60000).getTime(), endTime: new Date(ne.getTime() - Math.min(10, napMins*0.2)*60000).getTime(), stage: 2 },
+              { startTime: new Date(ne.getTime() - Math.min(10, napMins*0.2)*60000).getTime(), endTime: ne.getTime(), stage: 4 },
+            ]
+          });
+        }
       }
     }
 
@@ -169,6 +229,7 @@
   }
 
   function wearRec(day, startHour, endHour) {
+    if (endHour <= startHour) return null;
     return {
       startTime: new Date(day.getTime() + startHour * 3600000).getTime(),
       endTime:   new Date(day.getTime() + endHour  * 3600000).getTime(),
@@ -179,20 +240,28 @@
   function buildStages(start, totalMins) {
     const stages = [];
     let cursor = new Date(start), remaining = totalMins;
-    const cycles = [[1,10],[2,40],[1,20],[3,20],[1,10],[2,30],[1,20],[3,25],[1,10],[2,20],[1,20],[3,30],[1,15],[2,10],[1,10],[3,20]];
-    for (const [stage, base] of cycles) {
+    // Realistic cycle: light → deep → REM, repeating, with occasional micro-wake
+    const cycleTemplate = [[1,12],[2,35],[1,18],[3,22],[1,10],[2,28],[1,15],[3,25],[1,10],[2,20],[1,15],[3,28],[1,12],[2,15],[1,10],[3,18]];
+    for (const [stage, base] of cycleTemplate) {
       if (remaining <= 0) break;
-      const dur = Math.min(Math.max(base + rndInt(-5,5), 5), remaining);
+      // Add jitter — more jitter for longer bases
+      const jitter = rndInt(-Math.floor(base*0.3), Math.floor(base*0.3));
+      const dur = Math.min(Math.max(base + jitter, 4), remaining);
       const end = new Date(cursor.getTime() + dur * 60000);
       stages.push({ startTime: cursor.getTime(), endTime: end.getTime(), stage });
       cursor = end; remaining -= dur;
-      if (remaining > 5 && Math.random() < 0.1) {
-        const wd = rndInt(2,8), we = new Date(cursor.getTime() + wd*60000);
+      // Random brief awakening (~8% chance between cycles)
+      if (remaining > 5 && Math.random() < 0.08) {
+        const wd = rndInt(2, 10);
+        const we = new Date(cursor.getTime() + wd * 60000);
         stages.push({ startTime: cursor.getTime(), endTime: we.getTime(), stage: 4 });
         cursor = we; remaining -= wd;
       }
     }
-    if (remaining > 0) stages.push({ startTime: cursor.getTime(), endTime: new Date(cursor.getTime()+remaining*60000).getTime(), stage: 1 });
+    // Fill remainder with light sleep
+    if (remaining > 0) {
+      stages.push({ startTime: cursor.getTime(), endTime: new Date(cursor.getTime() + remaining * 60000).getTime(), stage: 1 });
+    }
     return stages;
   }
 </script>
