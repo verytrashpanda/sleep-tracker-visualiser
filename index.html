@@ -184,34 +184,47 @@
   function buildDayMap(records) {
     const dayMap = {};
     function ensureDay(key) { if (!dayMap[key]) dayMap[key] = { date: key, segments: [] }; return dayMap[key]; }
-    function dateKey(dt, isSleep) {
-      if (isSleep && dt.getHours() < 12) { const d = new Date(dt); d.setDate(d.getDate() - 1); return d.toISOString().slice(0, 10); }
-      return dt.toISOString().slice(0, 10);
+
+    // Split a segment at midnight boundaries and push each piece to the correct day row
+    function addSegment(start, end, type) {
+      if (!start || !end || end <= start) return;
+      let cursor = new Date(start);
+      while (cursor < end) {
+        const dayKey = cursor.toISOString().slice(0, 10);
+        // Midnight of the next day
+        const nextMidnight = new Date(dayKey);
+        nextMidnight.setDate(nextMidnight.getDate() + 1);
+        const segEnd = end < nextMidnight ? end : nextMidnight;
+        ensureDay(dayKey).segments.push({ start: new Date(cursor), end: segEnd, type });
+        cursor = nextMidnight;
+      }
     }
+
     for (const rec of records) {
       const start = parseTime(getField(rec, ['startTime','start_time','beginTime','begin_time']));
       const end   = parseTime(getField(rec, ['endTime','end_time','stopTime','stop_time']));
       if (!start) continue;
+      const recEnd = end || new Date(start.getTime() + 3600000);
+
       const isWearOnly = !!rec.wearOnly || (Array.isArray(rec.stages) && rec.stages.length === 0);
       const stages = getField(rec, ['stages','sleepStages','stageList','items','segments']);
       const isSleep = !isWearOnly && stages && Array.isArray(stages) && stages.length > 0;
+
       if (isWearOnly) {
-        const key = start.toISOString().slice(0, 10);
-        ensureDay(key).segments.push({ start, end: end || new Date(start.getTime() + 3600000), type: 'awake_worn' });
+        addSegment(start, recEnd, 'awake_worn');
       } else if (isSleep) {
-        const key = dateKey(start, true);
         for (const seg of stages) {
           const ss = parseTime(getField(seg, ['startTime','start_time','beginTime','begin_time']));
           const se = parseTime(getField(seg, ['endTime','end_time','stopTime','stop_time']));
           const sv = getField(seg, ['stage','type','sleepType','value','stageType']);
-          if (ss && se) ensureDay(key).segments.push({ start: ss, end: se, type: sv != null ? mapStage(sv) : 'sleep' });
+          if (ss && se) addSegment(ss, se, sv != null ? mapStage(sv) : 'sleep');
         }
       } else {
         const sv = getField(rec, ['stage','type','sleepType','stageType']);
-        const key = dateKey(start, true);
-        ensureDay(key).segments.push({ start, end: end || new Date(start.getTime() + 3600000), type: sv ? mapStage(sv) : 'sleep' });
+        addSegment(start, recEnd, sv ? mapStage(sv) : 'sleep');
       }
     }
+
     const keys = Object.keys(dayMap).sort();
     if (keys.length < 2) return Object.values(dayMap);
     const filled = [], cursor = new Date(keys[0]), last = new Date(keys[keys.length - 1]);
