@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Test Data Generator</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:        #0f0f11;
+      --surface:   #1a1a1e;
+      --border:    rgba(255,255,255,0.08);
+      --border2:   rgba(255,255,255,0.14);
+      --text:      #e8e8ec;
+      --muted:     #888890;
+      --faint:     #444450;
+      --accent:    #5b8dee;
+      --font-mono: 'IBM Plex Mono', monospace;
+      --font-sans: 'IBM Plex Sans', sans-serif;
+    }
+    body { background: var(--bg); color: var(--text); font-family: var(--font-sans); font-size: 14px; line-height: 1.6; min-height: 100vh; padding: 2rem 1.5rem; }
+    header { margin-bottom: 2.5rem; }
+    header h1 { font-family: var(--font-mono); font-size: 18px; font-weight: 500; letter-spacing: 0.04em; color: var(--text); margin-bottom: 4px; }
+    header p { font-size: 13px; color: var(--muted); }
+    header a { color: var(--faint); font-size: 12px; font-family: var(--font-mono); text-decoration: none; }
+    header a:hover { color: var(--accent); }
+
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1.5rem; margin-bottom: 1.5rem; }
+    .card h2 { font-family: var(--font-mono); font-size: 13px; font-weight: 500; color: var(--muted); margin-bottom: 1.25rem; letter-spacing: 0.04em; }
+
+    .field-row { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+    .field-row label { font-family: var(--font-mono); font-size: 12px; color: var(--muted); width: 140px; flex-shrink: 0; }
+    input[type=range] { flex: 1; min-width: 120px; max-width: 200px; accent-color: var(--accent); }
+    .val { font-family: var(--font-mono); font-size: 12px; color: var(--text); min-width: 40px; }
+    input[type=number] { font-family: var(--font-mono); font-size: 12px; padding: 4px 8px; border-radius: 4px; border: 1px solid var(--border2); background: var(--bg); color: var(--text); width: 70px; }
+    input[type=number]:focus { outline: none; border-color: var(--accent); }
+
+    .btn {
+      font-family: var(--font-mono);
+      font-size: 13px;
+      padding: 9px 20px;
+      border-radius: 5px;
+      border: 1px solid var(--border2);
+      background: transparent;
+      color: var(--text);
+      cursor: pointer;
+      transition: background 0.12s, border-color 0.12s;
+    }
+    .btn:hover { background: var(--surface); border-color: var(--accent); }
+
+    #msg { font-family: var(--font-mono); font-size: 12px; color: var(--muted); margin-top: 12px; }
+    #msg.ok { color: #5dbd7e; }
+
+    .desc { font-size: 12px; color: var(--faint); margin-bottom: 1.25rem; line-height: 1.7; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>test_data_generator</h1>
+  <p>Huawei Band · sleep visualiser &nbsp;·&nbsp; <a href="index.html">← back to visualiser</a></p>
+</header>
+
+<div class="card">
+  <h2>parameters</h2>
+  <p class="desc">Generates realistic Huawei Health-format JSON with daytime wear, sleep sessions, random off-wrist gaps, and occasional naps. Drop the output file into the visualiser.</p>
+
+  <div class="field-row">
+    <label>days</label>
+    <input type="range" min="7" max="365" value="30" id="days" oninput="document.getElementById('days-val').textContent=this.value">
+    <span class="val" id="days-val">30</span>
+  </div>
+  <div class="field-row">
+    <label>nights skipped (%)</label>
+    <input type="range" min="0" max="50" value="12" id="skip" oninput="document.getElementById('skip-val').textContent=this.value+'%'">
+    <span class="val" id="skip-val">12%</span>
+  </div>
+  <div class="field-row">
+    <label>nap chance (%)</label>
+    <input type="range" min="0" max="60" value="20" id="nap" oninput="document.getElementById('nap-val').textContent=this.value+'%'">
+    <span class="val" id="nap-val">20%</span>
+  </div>
+  <div class="field-row">
+    <label>sleep duration (hrs)</label>
+    <input type="number" min="3" max="12" value="5" id="sleep-min" title="minimum"> –
+    <input type="number" min="3" max="12" value="8" id="sleep-max" title="maximum">
+  </div>
+</div>
+
+<button class="btn" onclick="generate()">generate &amp; download</button>
+<p id="msg"></p>
+
+<script>
+  function rnd(min, max) { return min + Math.random() * (max - min); }
+  function rndInt(min, max) { return Math.floor(rnd(min, max)); }
+
+  function generate() {
+    const days      = parseInt(document.getElementById('days').value);
+    const skipPct   = parseInt(document.getElementById('skip').value) / 100;
+    const napPct    = parseInt(document.getElementById('nap').value) / 100;
+    const sleepMin  = parseFloat(document.getElementById('sleep-min').value) * 60;
+    const sleepMax  = parseFloat(document.getElementById('sleep-max').value) * 60;
+
+    const records = [];
+    const now = new Date();
+
+    for (let i = days - 1; i >= 0; i--) {
+      const day = new Date(now);
+      day.setDate(day.getDate() - i);
+      day.setHours(0, 0, 0, 0);
+
+      const wakeHour   = rnd(7, 9);
+      const skipNight  = Math.random() < skipPct;
+      const sleepHour  = rnd(22, 25);
+      const dayEndHour = skipNight ? 24 : sleepHour;
+
+      // Daytime wear with gaps
+      const numGaps = rndInt(1, 4);
+      const gaps = [];
+      for (let g = 0; g < numGaps; g++) {
+        const gs = rnd(9, 21), gd = rnd(0.25, 1);
+        gaps.push({ start: gs, end: gs + gd });
+      }
+      gaps.sort((a, b) => a.start - b.start);
+
+      let cursor = wakeHour;
+      for (const gap of gaps) {
+        if (gap.start > dayEndHour) continue;
+        if (cursor < gap.start) records.push(wearRec(day, cursor, Math.min(gap.start, dayEndHour)));
+        cursor = gap.end;
+      }
+      if (cursor < dayEndHour) records.push(wearRec(day, cursor, dayEndHour));
+
+      // Night sleep
+      if (!skipNight) {
+        const sleepStart = new Date(day.getTime() + sleepHour * 3600000);
+        const totalMins  = rndInt(sleepMin, sleepMax);
+        const stages     = buildStages(sleepStart, totalMins);
+        records.push({ startTime: sleepStart.getTime(), endTime: stages[stages.length-1].endTime, stages });
+      }
+
+      // Nap
+      if (Math.random() < napPct) {
+        const napHour = rnd(13, 16), napMins = rndInt(20, 60);
+        const ns = new Date(day.getTime() + napHour * 3600000);
+        const ne = new Date(ns.getTime() + napMins * 60000);
+        records.push({
+          startTime: ns.getTime(), endTime: ne.getTime(),
+          stages: [
+            { startTime: ns.getTime(), endTime: new Date(ns.getTime()+5*60000).getTime(), stage: 1 },
+            { startTime: new Date(ns.getTime()+5*60000).getTime(), endTime: new Date(ne.getTime()-5*60000).getTime(), stage: 2 },
+            { startTime: new Date(ne.getTime()-5*60000).getTime(), endTime: ne.getTime(), stage: 4 },
+          ]
+        });
+      }
+    }
+
+    const json = JSON.stringify({ sleepRecords: records }, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url; a.download = 'sleep_detail_test.json'; a.click();
+    URL.revokeObjectURL(url);
+    const msg = document.getElementById('msg');
+    msg.className = 'ok';
+    msg.textContent = `generated ${records.length} records across ${days} days — drop sleep_detail_test.json into the visualiser`;
+  }
+
+  function wearRec(day, startHour, endHour) {
+    return {
+      startTime: new Date(day.getTime() + startHour * 3600000).getTime(),
+      endTime:   new Date(day.getTime() + endHour  * 3600000).getTime(),
+      wearOnly: true, stages: []
+    };
+  }
+
+  function buildStages(start, totalMins) {
+    const stages = [];
+    let cursor = new Date(start), remaining = totalMins;
+    const cycles = [[1,10],[2,40],[1,20],[3,20],[1,10],[2,30],[1,20],[3,25],[1,10],[2,20],[1,20],[3,30],[1,15],[2,10],[1,10],[3,20]];
+    for (const [stage, base] of cycles) {
+      if (remaining <= 0) break;
+      const dur = Math.min(Math.max(base + rndInt(-5,5), 5), remaining);
+      const end = new Date(cursor.getTime() + dur * 60000);
+      stages.push({ startTime: cursor.getTime(), endTime: end.getTime(), stage });
+      cursor = end; remaining -= dur;
+      if (remaining > 5 && Math.random() < 0.1) {
+        const wd = rndInt(2,8), we = new Date(cursor.getTime() + wd*60000);
+        stages.push({ startTime: cursor.getTime(), endTime: we.getTime(), stage: 4 });
+        cursor = we; remaining -= wd;
+      }
+    }
+    if (remaining > 0) stages.push({ startTime: cursor.getTime(), endTime: new Date(cursor.getTime()+remaining*60000).getTime(), stage: 1 });
+    return stages;
+  }
+</script>
+</body>
+</html>
