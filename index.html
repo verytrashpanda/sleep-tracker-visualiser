@@ -18,7 +18,6 @@
       --muted:     #888890;
       --faint:     #444450;
       --accent:    #5b8dee;
-      --c-worn:    #3a7fd4;
       --c-sleep:   #1a3f7a;
       --c-wake:    #c47d3a;
       --font-mono: 'IBM Plex Mono', monospace;
@@ -47,33 +46,32 @@
     .legend { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 1rem; align-items: center; }
     .leg { display: flex; align-items: center; gap: 6px; font-size: 11px; font-family: var(--font-mono); color: var(--muted); }
     .swatch { width: 12px; height: 12px; border-radius: 2px; flex-shrink: 0; }
-    .axis { display: flex; margin-left: 58px; margin-bottom: 5px; min-width: 400px; }
-    .axis-lbl { font-size: 10px; font-family: var(--font-mono); color: var(--faint); flex: 1; text-align: center; }
+    .axis { position: relative; margin-left: 58px; margin-bottom: 5px; min-width: 400px; height: 14px; }
+    .axis-lbl { position: absolute; font-size: 10px; font-family: var(--font-mono); color: var(--faint); transform: translateX(-50%); }
     #chart-wrap { overflow-x: auto; }
     .day-row { display: flex; align-items: center; margin-bottom: 3px; }
     .day-label { font-size: 11px; font-family: var(--font-mono); color: var(--muted); width: 50px; flex-shrink: 0; text-align: right; padding-right: 8px; }
     .day-bar { flex: 1; height: 20px; position: relative; background: var(--surface); border-radius: 2px; overflow: hidden; min-width: 400px; }
-    .seg { position: absolute; top: 0; height: 100%; transition: opacity 0.1s; }
+    .seg { position: absolute; top: 0; height: 100%; }
     .seg:hover { opacity: 0.8; cursor: default; }
     #tooltip { position: fixed; background: var(--surface2); border: 1px solid var(--border2); border-radius: 6px; padding: 7px 11px; font-family: var(--font-mono); font-size: 12px; pointer-events: none; display: none; z-index: 999; color: var(--text); white-space: nowrap; }
     #tooltip b { display: block; color: var(--accent); font-weight: 500; margin-bottom: 2px; }
     #debug { font-family: var(--font-mono); font-size: 11px; color: var(--muted); background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 12px 16px; margin-top: 2rem; white-space: pre-wrap; display: none; }
     .debug-toggle { font-family: var(--font-mono); font-size: 11px; color: var(--faint); background: none; border: none; cursor: pointer; padding: 0; margin-top: 1.5rem; display: none; }
     .debug-toggle:hover { color: var(--muted); }
-    @media (max-width: 600px) { body { padding: 1rem; } .stats { gap: 8px; } .stat { padding: 8px 12px; } }
   </style>
 </head>
 <body>
 
 <header>
   <h1>sleep_visualiser</h1>
-  <p>Huawei Band · wear &amp; sleep patterns &nbsp;·&nbsp; <a href="generate.html">generate test data →</a></p>
+  <p>Huawei Band · sleep patterns &nbsp;·&nbsp; <a href="generate.html">generate test data →</a></p>
 </header>
 
 <div id="drop" onclick="document.getElementById('fileInput').click()">
   <input type="file" id="fileInput" accept=".json" onchange="handleFile(event)">
-  <p class="drop-title">drop huawei health json here</p>
-  <p class="drop-sub">from "Health detail data &amp; description" in your privacy export ZIP · also accepts test data</p>
+  <p class="drop-title">drop a huawei health json file here</p>
+  <p class="drop-sub">from "Health detail data &amp; description" — the large type 9 sleep file</p>
 </div>
 
 <div id="main">
@@ -92,8 +90,7 @@
     </select>
   </div>
   <div class="legend">
-    <span class="leg"><span class="swatch" style="background:var(--surface2);border:1px solid var(--border2)"></span>not worn</span>
-    <span class="leg"><span class="swatch" style="background:var(--c-worn)"></span>worn, awake</span>
+    <span class="leg"><span class="swatch" style="background:var(--surface2);border:1px solid var(--border2)"></span>no data</span>
     <span class="leg"><span class="swatch" style="background:var(--c-sleep)"></span>asleep</span>
     <span class="leg"><span class="swatch" style="background:var(--c-wake)"></span>waking up</span>
   </div>
@@ -106,13 +103,28 @@
 <div id="tooltip"></div>
 
 <script>
-  const COLORS = { awake_worn: 'var(--c-worn)', sleep: 'var(--c-sleep)', awake_sleep: 'var(--c-wake)' };
-  const LABELS = { awake_worn: 'Worn, awake', sleep: 'Asleep', awake_sleep: 'Waking up' };
-  let allDays = [], debugText = '';
+  const COLORS = { sleep: 'var(--c-sleep)', awake_sleep: 'var(--c-wake)' };
+  const LABELS = { sleep: 'Asleep', awake_sleep: 'Waking up' };
+
+  const KEY_MAP = {
+    'PROFESSIONAL_SLEEP_SHALLOW': 'sleep',
+    'PROFESSIONAL_SLEEP_DEEP':    'sleep',
+    'PROFESSIONAL_SLEEP_DREAM':   'sleep',
+    'PROFESSIONAL_SLEEP_NOON':    'sleep',
+    'SLEEP_LIGHT':                'sleep',
+    'SLEEP_DEEP':                 'sleep',
+    'PROFESSIONAL_SLEEP_WAKE':    'awake_sleep',
+    'SLEEP_AWAKE':                'awake_sleep',
+  };
+
+  let allDays = [];
+  let debugLines = [];
 
   function handleFile(e) {
     const f = e.target.files[0]; if (!f) return;
-    const r = new FileReader(); r.onload = ev => parseJSON(ev.target.result); r.readAsText(f);
+    const r = new FileReader();
+    r.onload = ev => parseJSON(ev.target.result);
+    r.readAsText(f);
   }
 
   const drop = document.getElementById('drop');
@@ -121,161 +133,204 @@
   drop.addEventListener('drop', e => {
     e.preventDefault(); drop.classList.remove('drag');
     const f = e.dataTransfer.files[0]; if (!f) return;
-    const r = new FileReader(); r.onload = ev => parseJSON(ev.target.result); r.readAsText(f);
+    const r = new FileReader();
+    r.onload = ev => parseJSON(ev.target.result);
+    r.readAsText(f);
   });
 
-  function getField(obj, candidates) {
-    for (const c of candidates) {
-      if (obj[c] !== undefined) return obj[c];
-      const lc = Object.keys(obj).find(k => k.toLowerCase() === c.toLowerCase());
-      if (lc !== undefined) return obj[lc];
-    }
-    return undefined;
+  // Convert epoch ms + timezone string "+0100" to a fake-UTC Date
+  // where getUTC*() methods return local time values
+  function toLocal(epochMs, tzStr) {
+    const sign  = tzStr[0] === '+' ? 1 : -1;
+    const hh    = parseInt(tzStr.slice(1, 3), 10);
+    const mm    = parseInt(tzStr.slice(3, 5), 10);
+    const offMs = sign * (hh * 60 + mm) * 60000;
+    return new Date(epochMs + offMs);
   }
 
-  function parseTime(val) {
-    if (!val) return null;
-    if (typeof val === 'number') return val > 1e10 ? new Date(val) : new Date(val * 1000);
-    if (typeof val === 'string') return new Date(val.replace(' ', 'T'));
-    return null;
+  function localDateKey(dt) {
+    const y = dt.getUTCFullYear();
+    const m = String(dt.getUTCMonth() + 1).padStart(2, '0');
+    const d = String(dt.getUTCDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
   }
 
-  function mapStage(v) {
-    const s = String(v).toLowerCase();
-    if (s === '4' || s === '6' || s.includes('awake')) return 'awake_sleep';
-    return 'sleep';
-  }
-
-  function hasSleepFields(obj) {
-    const keys = Object.keys(obj).map(k => k.toLowerCase());
-    return keys.some(k => k.includes('sleep') || k.includes('stage') || k.includes('starttime') || k.includes('start_time') || k.includes('wearonly'));
+  function fmtTime(dt) {
+    return String(dt.getUTCHours()).padStart(2,'0') + ':' + String(dt.getUTCMinutes()).padStart(2,'0');
   }
 
   function parseJSON(text) {
-    const lines = [];
+    debugLines = [];
     let data;
     try { data = JSON.parse(text); } catch(e) { alert('JSON parse error: ' + e.message); return; }
-    lines.push('top-level keys: ' + Object.keys(data).join(', '));
-    let records = [];
-    for (const k of Object.keys(data)) {
-      if (Array.isArray(data[k]) && data[k].length > 0 && hasSleepFields(data[k][0])) {
-        records = data[k]; lines.push('using array: ' + k); break;
-      }
-    }
-    if (!records.length && Array.isArray(data) && data.length && hasSleepFields(data[0])) {
-      records = data; lines.push('using root array');
-    }
-    if (!records.length) {
-      debugText = 'could not find records.\n' + lines.join('\n');
-      document.getElementById('debug').textContent = debugText;
-      document.getElementById('debug').style.display = 'block';
+    if (!Array.isArray(data)) { alert('Expected a JSON array at root'); return; }
+    debugLines.push('Total records in file: ' + data.length);
+
+    const sleepRecs = data.filter(r => {
+      const sp = r.samplePoints && r.samplePoints[0];
+      return sp && KEY_MAP[sp.key] !== undefined;
+    });
+    debugLines.push('Sleep records found: ' + sleepRecs.length);
+
+    if (!sleepRecs.length) {
+      alert('No sleep records found in this file.');
       return;
     }
-    lines.push('records found: ' + records.length);
-    allDays = buildDayMap(records);
-    lines.push('days (incl. empty): ' + allDays.length);
-    debugText = lines.join('\n');
+
+    sleepRecs.sort((a, b) => a.startTime - b.startTime);
+
+    const segments = sleepRecs.map(r => {
+      const sp    = r.samplePoints[0];
+      const tz    = r.timeZone || '+0000';
+      return {
+        start: toLocal(r.startTime, tz),
+        end:   toLocal(r.endTime,   tz),
+        type:  KEY_MAP[sp.key]
+      };
+    });
+
+    debugLines.push('Date range: ' + localDateKey(segments[0].start) + ' → ' + localDateKey(segments[segments.length-1].end));
+
+    allDays = buildDayMap(segments);
+    debugLines.push('Days with sleep: ' + allDays.filter(d => d.segments.length > 0).length);
+    debugLines.push('Days total: ' + allDays.length);
+
     document.getElementById('main').style.display = 'block';
     document.getElementById('drop').style.display = 'none';
     document.getElementById('debugToggle').style.display = 'block';
-    buildAxis(); buildStats(); render();
+    buildAxis();
+    buildStats();
+    render();
+    document.getElementById('debug').textContent = debugLines.join('\n');
   }
 
-  function buildDayMap(records) {
+  function buildDayMap(segments) {
     const dayMap = {};
-    function ensureDay(key) { if (!dayMap[key]) dayMap[key] = { date: key, segments: [] }; return dayMap[key]; }
-    function dateKey(dt, isSleep) {
-      if (isSleep && dt.getHours() < 12) { const d = new Date(dt); d.setDate(d.getDate() - 1); return d.toISOString().slice(0, 10); }
-      return dt.toISOString().slice(0, 10);
+
+    function ensureDay(key) {
+      if (!dayMap[key]) dayMap[key] = { date: key, segments: [] };
+      return dayMap[key];
     }
-    for (const rec of records) {
-      const start = parseTime(getField(rec, ['startTime','start_time','beginTime','begin_time']));
-      const end   = parseTime(getField(rec, ['endTime','end_time','stopTime','stop_time']));
-      if (!start) continue;
-      const isWearOnly = !!rec.wearOnly || (Array.isArray(rec.stages) && rec.stages.length === 0);
-      const stages = getField(rec, ['stages','sleepStages','stageList','items','segments']);
-      const isSleep = !isWearOnly && stages && Array.isArray(stages) && stages.length > 0;
-      if (isWearOnly) {
-        const key = start.toISOString().slice(0, 10);
-        ensureDay(key).segments.push({ start, end: end || new Date(start.getTime() + 3600000), type: 'awake_worn' });
-      } else if (isSleep) {
-        const key = dateKey(start, true);
-        for (const seg of stages) {
-          const ss = parseTime(getField(seg, ['startTime','start_time','beginTime','begin_time']));
-          const se = parseTime(getField(seg, ['endTime','end_time','stopTime','stop_time']));
-          const sv = getField(seg, ['stage','type','sleepType','value','stageType']);
-          if (ss && se) ensureDay(key).segments.push({ start: ss, end: se, type: sv != null ? mapStage(sv) : 'sleep' });
-        }
-      } else {
-        const sv = getField(rec, ['stage','type','sleepType','stageType']);
-        const key = dateKey(start, true);
-        ensureDay(key).segments.push({ start, end: end || new Date(start.getTime() + 3600000), type: sv ? mapStage(sv) : 'sleep' });
+
+    function addSeg(start, end, type) {
+      if (end <= start) return;
+      let cursor = new Date(start);
+      while (cursor < end) {
+        const dayKey = localDateKey(cursor);
+        const nextMidnight = new Date(Date.UTC(
+          cursor.getUTCFullYear(),
+          cursor.getUTCMonth(),
+          cursor.getUTCDate() + 1
+        ));
+        const segEnd = end < nextMidnight ? new Date(end) : new Date(nextMidnight);
+        ensureDay(dayKey).segments.push({ start: new Date(cursor), end: segEnd, type });
+        cursor = new Date(nextMidnight);
       }
     }
+
+    for (const seg of segments) addSeg(seg.start, seg.end, seg.type);
+
+    for (const day of Object.values(dayMap)) day.segments = coalesce(day.segments);
+
     const keys = Object.keys(dayMap).sort();
-    if (keys.length < 2) return Object.values(dayMap);
-    const filled = [], cursor = new Date(keys[0]), last = new Date(keys[keys.length - 1]);
+    const filled = [];
+    const cursor = new Date(keys[0] + 'T00:00:00Z');
+    const last   = new Date(keys[keys.length - 1] + 'T00:00:00Z');
     while (cursor <= last) {
       const k = cursor.toISOString().slice(0, 10);
       filled.push(dayMap[k] || { date: k, segments: [] });
-      cursor.setDate(cursor.getDate() + 1);
+      cursor.setUTCDate(cursor.getUTCDate() + 1);
     }
     return filled;
   }
 
-  function pct(dt) { const h = dt.getHours() + dt.getMinutes()/60 + dt.getSeconds()/3600; return (h / 24) * 100; }
-  function fmt(d) { return d ? d.toTimeString().slice(0,5) : '?'; }
+  function coalesce(segs) {
+    if (!segs.length) return segs;
+    const sorted = [...segs].sort((a, b) => a.start - b.start);
+    const out = [{ start: new Date(sorted[0].start), end: new Date(sorted[0].end), type: sorted[0].type }];
+    for (let i = 1; i < sorted.length; i++) {
+      const prev = out[out.length - 1], curr = sorted[i];
+      if (curr.type === prev.type && curr.start <= prev.end) {
+        if (curr.end > prev.end) prev.end = new Date(curr.end);
+      } else {
+        out.push({ start: new Date(curr.start), end: new Date(curr.end), type: curr.type });
+      }
+    }
+    return out;
+  }
+
+  function pct(dt, isEnd) {
+    const ms = dt.getUTCHours() * 3600000 + dt.getUTCMinutes() * 60000 + dt.getUTCSeconds() * 1000;
+    if (ms === 0 && isEnd) return 100;
+    return (ms / 86400000) * 100;
+  }
+
   function fmtLabel(s) { const [,m,d] = s.split('-'); return `${d}/${m}`; }
 
   function buildAxis() {
     document.getElementById('axis').innerHTML =
-      [0,2,4,6,8,10,12,14,16,18,20,22,24].map(h => `<span class="axis-lbl">${h===24?'0':h}</span>`).join('');
+      [0,2,4,6,8,10,12,14,16,18,20,22].map(h =>
+        `<span class="axis-lbl" style="left:${(h/24*100).toFixed(2)}%">${h}:00</span>`
+      ).join('') + '<span class="axis-lbl" style="left:100%">00:00</span>';
   }
 
   function buildStats() {
     const sleepDays = allDays.filter(d => d.segments.some(s => s.type === 'sleep'));
-    const emptyDays = allDays.filter(d => d.segments.length === 0);
-    const totalMs = sleepDays.reduce((t,d) => t + d.segments.filter(s=>s.type==='sleep').reduce((a,s)=>a+(s.end-s.start),0), 0);
+    const totalMs   = sleepDays.reduce((t, d) =>
+      t + d.segments.filter(s => s.type === 'sleep').reduce((a, s) => a + (s.end - s.start), 0), 0);
     const avgMs = sleepDays.length ? totalMs / sleepDays.length : 0;
-    const fmtHr = ms => { const h=Math.floor(ms/3600000), m=Math.round((ms%3600000)/60000); return `${h}h ${m}m`; };
+    const fmtHr = ms => `${Math.floor(ms/3600000)}h ${Math.round((ms%3600000)/60000)}m`;
     document.getElementById('stats').innerHTML = `
       <div class="stat"><div class="stat-val">${allDays.length}</div><div class="stat-lbl">days total</div></div>
       <div class="stat"><div class="stat-val">${sleepDays.length}</div><div class="stat-lbl">nights with sleep</div></div>
-      <div class="stat"><div class="stat-val">${emptyDays.length}</div><div class="stat-lbl">days not worn</div></div>
+      <div class="stat"><div class="stat-val">${allDays.length - sleepDays.length}</div><div class="stat-lbl">days no data</div></div>
       <div class="stat"><div class="stat-val">${fmtHr(avgMs)}</div><div class="stat-lbl">avg sleep / night</div></div>`;
   }
 
   function render() {
-    const sort = document.getElementById('sortSel').value;
+    const sort   = document.getElementById('sortSel').value;
     const filter = document.getElementById('filterSel').value;
     let days = [...allDays];
     if (filter === 'sleep') days = days.filter(d => d.segments.some(s => s.type === 'sleep'));
-    if (sort === 'date') days.sort((a,b) => a.date.localeCompare(b.date));
-    else if (sort === 'date-desc') days.sort((a,b) => b.date.localeCompare(a.date));
-    else days.sort((a,b) => {
-      const ms = d => d.segments.filter(s=>s.type==='sleep').reduce((t,s)=>t+(s.end-s.start),0);
-      return ms(b)-ms(a);
+    if (sort === 'date') days.sort((a, b) => a.date.localeCompare(b.date));
+    else if (sort === 'date-desc') days.sort((a, b) => b.date.localeCompare(a.date));
+    else days.sort((a, b) => {
+      const ms = d => d.segments.filter(s => s.type === 'sleep').reduce((t, s) => t + (s.end - s.start), 0);
+      return ms(b) - ms(a);
     });
+
     const chart = document.getElementById('chart');
     chart.innerHTML = days.map(day => {
       const segs = day.segments.map(s => {
-        const l = pct(s.start), w = Math.max(pct(s.end)-l, 0.15);
-        return `<div class="seg" style="left:${l.toFixed(2)}%;width:${w.toFixed(2)}%;background:${COLORS[s.type]||'#555'}" data-type="${LABELS[s.type]||s.type}" data-start="${fmt(s.start)}" data-end="${fmt(s.end)}"></div>`;
+        const l = pct(s.start, false);
+        const w = Math.max(pct(s.end, true) - l, 0.15);
+        return `<div class="seg" style="left:${l.toFixed(3)}%;width:${w.toFixed(3)}%;background:${COLORS[s.type]||'#555'}" data-type="${LABELS[s.type]||s.type}" data-start="${fmtTime(s.start)}" data-end="${fmtTime(s.end)}"></div>`;
       }).join('');
       return `<div class="day-row"><div class="day-label">${fmtLabel(day.date)}</div><div class="day-bar">${segs}</div></div>`;
     }).join('');
+
     const tip = document.getElementById('tooltip');
     chart.querySelectorAll('.seg').forEach(el => {
-      el.addEventListener('mouseenter', e => { tip.style.display='block'; tip.innerHTML=`<b>${e.target.dataset.type}</b>${e.target.dataset.start} – ${e.target.dataset.end}`; });
-      el.addEventListener('mousemove', e => { tip.style.left=(e.clientX+14)+'px'; tip.style.top=(e.clientY-8)+'px'; });
-      el.addEventListener('mouseleave', () => { tip.style.display='none'; });
+      el.addEventListener('mouseenter', e => {
+        tip.style.display = 'block';
+        tip.innerHTML = `<b>${e.target.dataset.type}</b>${e.target.dataset.start} – ${e.target.dataset.end}`;
+      });
+      el.addEventListener('mousemove', e => {
+        tip.style.visibility = 'hidden'; tip.style.display = 'block';
+        const tw = tip.offsetWidth;
+        const flip = e.clientX + 14 + tw > window.innerWidth;
+        tip.style.left = (flip ? e.clientX - 14 - tw : e.clientX + 14) + 'px';
+        tip.style.top  = (e.clientY - 8) + 'px';
+        tip.style.visibility = 'visible';
+      });
+      el.addEventListener('mouseleave', () => { tip.style.display = 'none'; });
     });
   }
 
   function toggleDebug() {
     const el = document.getElementById('debug'), btn = document.getElementById('debugToggle');
-    if (el.style.display === 'none' || !el.style.display) { el.style.display='block'; el.textContent=debugText; btn.textContent='hide parser info'; }
-    else { el.style.display='none'; btn.textContent='show parser info'; }
+    if (el.style.display === 'none' || !el.style.display) { el.style.display = 'block'; btn.textContent = 'hide parser info'; }
+    else { el.style.display = 'none'; btn.textContent = 'show parser info'; }
   }
 </script>
 </body>
