@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Heart Rate Wear Tracker</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #111;
+      color: #eee;
+      padding: 20px;
+    }
+
+    h1 { margin-bottom: 10px; }
+
+    canvas {
+      background: #1a1a1a;
+      border-radius: 10px;
+      padding: 10px;
+    }
+
+    .bar {
+      height: 30px;
+      display: flex;
+      margin-top: 20px;
+      border-radius: 6px;
+      overflow: hidden;
+    }
+
+    .segment { height: 100%; }
+    .worn { background: #4caf50; }
+    .notworn { background: #f44336; }
+
+    .stats { margin-top: 20px; }
+  </style>
+</head>
+<body>
+
+<h1>Heart Rate Wear Tracker</h1>
+
+<input type="file" id="fileInput" />
+
+<canvas id="chart" height="100"></canvas>
+
+<div class="bar" id="timeline"></div>
+<div class="stats" id="stats"></div>
+
+<script>
+// 🔍 Find the array automatically (handles Huawei chaos)
+function extractArray(json) {
+  if (Array.isArray(json)) return json;
+
+  if (json.data && Array.isArray(json.data)) return json.data;
+
+  if (json.data && json.data.healthData) return json.data.healthData;
+
+  // fallback: search deeply
+  for (const key in json) {
+    if (Array.isArray(json[key])) {
+      return json[key];
+    }
+  }
+
+  return [];
+}
+
+// ❤️ Parse heart rate
+function parseHuaweiHeartRate(data) {
+  const result = [];
+
+  data.forEach(entry => {
+    if (!entry.samplePoints) return;
+
+    entry.samplePoints.forEach(p => {
+      if (p.key && p.key.includes("HEARTRATE")) {
+        const hr = Number(p.value);
+
+        if (!isNaN(hr)) {
+          result.push({
+            time: new Date((entry.startTime + entry.endTime) / 2),
+            hr
+          });
+        }
+      }
+    });
+  });
+
+  return result.sort((a, b) => a.time - b.time);
+}
+
+// ⏱ Wear detection
+function computeWearSegments(hrData) {
+  const segments = [];
+  const maxGap = 10 * 60 * 1000;
+
+  let start = hrData[0].time;
+  let last = hrData[0].time;
+
+  for (let i = 1; i < hrData.length; i++) {
+    const curr = hrData[i].time;
+    const gap = curr - last;
+
+    if (gap > maxGap) {
+      segments.push({ start, end: last, worn: true });
+      segments.push({ start: last, end: curr, worn: false });
+      start = curr;
+    }
+
+    last = curr;
+  }
+
+  segments.push({ start, end: last, worn: true });
+  return segments;
+}
+
+// 📊 Chart
+let chart;
+
+function renderChart(hrData) {
+  const ctx = document.getElementById("chart");
+
+  if (chart) chart.destroy();
+
+  chart = new Chart(ctx, {
+    type: "line",
+    data: {
+      datasets: [{
+        label: "Heart Rate",
+        data: hrData.map(d => ({ x: d.time, y: d.hr })),
+        borderWidth: 1,
+        pointRadius: 0
+      }]
+    },
+    options: {
+      parsing: false,
+      scales: {
+        x: { type: "time" },
+        y: { beginAtZero: false }
+      }
+    }
+  });
+}
+
+// 🟩🟥 Timeline
+function renderTimeline(segments) {
+  const container = document.getElementById("timeline");
+  container.innerHTML = "";
+
+  const total = segments[segments.length - 1].end - segments[0].start;
+
+  segments.forEach(seg => {
+    const div = document.createElement("div");
+    const width = ((seg.end - seg.start) / total) * 100;
+
+    div.className = "segment " + (seg.worn ? "worn" : "notworn");
+    div.style.width = width + "%";
+
+    container.appendChild(div);
+  });
+}
+
+// 📈 Stats
+function renderStats(segments) {
+  let wornTime = 0;
+  let totalTime = segments[segments.length - 1].end - segments[0].start;
+
+  segments.forEach(s => {
+    if (s.worn) wornTime += (s.end - s.start);
+  });
+
+  const percent = (wornTime / totalTime * 100).toFixed(1);
+
+  document.getElementById("stats").innerHTML = `
+    <p><strong>Wear time:</strong> ${(wornTime / 3600000).toFixed(2)} hours</p>
+    <p><strong>Total span:</strong> ${(totalTime / 3600000).toFixed(2)} hours</p>
+    <p><strong>Compliance:</strong> ${percent}%</p>
+  `;
+}
+
+// 🚀 File upload handler
+document.getElementById("fileInput").addEventListener("change", async (e) => {
+  const file = e.target.files[0];
+  const text = await file.text();
+  const json = JSON.parse(text);
+
+  console.log("Loaded JSON keys:", Object.keys(json));
+
+  const rawArray = extractArray(json);
+  console.log("Detected array length:", rawArray.length);
+
+  const hrData = parseHuaweiHeartRate(rawArray);
+  console.log("Parsed HR points:", hrData.length, hrData.slice(0, 5));
+
+  if (!hrData.length) {
+    alert("No heart rate data found. Check console.");
+    return;
+  }
+
+  const segments = computeWearSegments(hrData);
+
+  renderChart(hrData);
+  renderTimeline(segments);
+  renderStats(segments);
+});
+</script>
+
+</body>
+</html>
